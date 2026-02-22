@@ -1,0 +1,4 @@
+﻿  TheOnlyHolyDiver.cpp
+D:\CodeHolyDiver\CodeHolyDiver\TheOnlyHolyDiver\TheOnlyHolyDiver.cpp(121,26): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+D:\CodeHolyDiver\CodeHolyDiver\TheOnlyHolyDiver\TheOnlyHolyDiver.cpp(122,29): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+  TheOnlyHolyDiver.vcxproj -> D:\CodeHolyDiver\CodeHolyDiver\TheOnlyHolyDiver\x64\Debug\TheOnlyHolyDiver.exe

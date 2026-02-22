@@ -1,4 +1,0 @@
-﻿  HolyDiver.cpp
-D:\CodeHolyDiver\CodeHolyDiver\HolyDiver\HolyDiver.cpp(106,13): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-D:\CodeHolyDiver\CodeHolyDiver\HolyDiver\HolyDiver.cpp(107,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-  HolyDiver.vcxproj -> D:\CodeHolyDiver\CodeHolyDiver\HolyDiver\x64\Debug\HolyDiver.exe
