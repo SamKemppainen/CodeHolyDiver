@@ -1,53 +1,302 @@
 /*
-*
-* Holy diver - an epic adventure at object-oriented world way beneath the surface!
-* Week 1: Load map from file, display it.
-* Week 2: Player movement (1=up,2=down,3=left,4=right), oxygen consumption, map reload.
-*
-*/
+ * Holy Diver - an epic adventure in an object-oriented world beneath the surface!
+ *
+ * Week 1: Load map from file, display it.
+ * Week 2: Player movement, oxygen consumption, map reload.
+ * Week 3: Second map, enemy chase AI, death screen, life/respawn system.
+ * Week 4: Fog of war, battery/illuminate system, enemy polymorphism
+ *         (MovingEnemy / StationaryEnemy), World class owns all game objects.
+ *
+ * Controls:
+ *   Move:       w=up  s=down  a=left  d=right
+ *   Illuminate: i=up  k=down  j=left  l=right
+ *   Other:      r=reload  n=next level  q=quit
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctime>
 #include <string>
 #include <iostream>
-#include <fstream>
 #include <vector>
 #include "classes.h"
 
 using namespace std;
 
 /****************************************************/
-// declaring functions:
+// Function declarations
 /****************************************************/
 void start_splash_screen(void);
 void startup_routines(void);
 void quit_routines(void);
-int load_level(string);
-int read_input(char*);
+int  read_input(char*);
 void update_state(char);
 void render_screen(void);
-void free_map(void);
 void gameOver(void);
+void death_screen(void);
+void handle_player_death(void);
+void next_level(void);
 
 /****************************************************/
-// global variables:
+// Global game state
 /****************************************************/
-char** map;
-int map_rows = 0;
-int map_cols = 0;
-string current_map_path = "";
-bool game_over = false; // set to true by gameOver() to break the main loop
+bool game_over = false;
 
-const int MAX_HEALTH = 100;
-const int MAX_OXYGEN = 100;
-const int INIT_LIVES = 3;
+vector<string> map_playlist;
+int            current_map_index = 0;
+
+// Constants
 const int OXYGEN_PER_MOVE = 2;
+const int OXYGEN_DAMAGE = 5;   // health lost per move when oxygen = 0
+const int INIT_LIVES = 3;
 
-Player player_data; // uses Player class from classes.h, defaults: health=100, oxygen=100, lives=3
+// The two main game objects.
+// Player lives here in main scope; World holds a pointer to it.
+Player player_data;
+World  world;
 
+/****************************************************/
+// gameOver - called by World or death logic to stop the loop
+/****************************************************/
 void gameOver()
 {
     game_over = true;
+}
+
+/****************************************************/
+// death_screen
+/****************************************************/
+void death_screen(void)
+{
+    cout << "\n";
+    cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+    cout << "  ~                                                  ~\n";
+    cout << "  ~           G A M E   O V E R                     ~\n";
+    cout << "  ~                                                  ~\n";
+    cout << "  ~   Your light flickered out in the deep dark.     ~\n";
+    cout << "  ~       The sea keeps all its secrets.             ~\n";
+    cout << "  ~                                                  ~\n";
+    cout << "  ~             No lives remaining.                  ~\n";
+    cout << "  ~                                                  ~\n";
+    cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n";
+}
+
+/****************************************************/
+// handle_player_death
+// Called whenever player health hits 0.
+/****************************************************/
+void handle_player_death(void)
+{
+    cout << "\n*** YOU DIED! ***\n";
+
+    // Remove player marker from map before respawn
+    world.setTile(player_data.x, player_data.y, 'o');
+
+    bool survived = player_data.loseLife();
+
+    if (!survived) {
+        death_screen();
+        gameOver();
+        return;
+    }
+
+    cout << "Lives remaining: " << player_data.lives << "  -- Respawning...\n";
+
+    // Reload the level to reset enemy positions; keep player's lives count
+    int saved_lives = player_data.lives;
+    world.loadFromFile(world.mapFilePath);
+    player_data.lives = saved_lives;
+
+    render_screen();
+}
+
+/****************************************************/
+// next_level
+/****************************************************/
+void next_level(void)
+{
+    current_map_index++;
+    if (current_map_index >= (int)map_playlist.size()) {
+        cout << "\n";
+        cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+        cout << "  ~                                                  ~\n";
+        cout << "  ~         Y O U   W I N !                         ~\n";
+        cout << "  ~                                                  ~\n";
+        cout << "  ~   You have explored every depth of the sea.      ~\n";
+        cout << "  ~   The treasure is yours, brave diver!            ~\n";
+        cout << "  ~                                                  ~\n";
+        cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n";
+        gameOver();
+        return;
+    }
+
+    cout << "\n--- Descending deeper... Level " << (current_map_index + 1) << " ---\n";
+    player_data.health = 100;
+    player_data.oxygen = 100;
+    player_data.battery = 100;
+
+    if (world.loadFromFile(map_playlist[current_map_index]) != 0) {
+        cout << "Failed to load next level. Exiting.\n";
+        gameOver();
+    }
+}
+
+/****************************************************/
+// read_input
+/****************************************************/
+int read_input(char* input)
+{
+    cout << ">>> Move: w/a/s/d  |  Illuminate: i/j/k/l  |  r=reload  n=next  q=quit : ";
+    try { cin >> *input; }
+    catch (...) { return -1; }
+    cout << "\n";
+    cin.ignore();
+    if (*input == 'q') return -2;
+    return 0;
+}
+
+/****************************************************/
+// update_state
+// Dispatches input to movement, illumination, or system commands.
+/****************************************************/
+void update_state(char input)
+{
+    if (game_over) return;
+
+    // ---- System commands ----
+    if (input == 'r') {
+        cout << "Reloading map...\n";
+        int saved_lives = player_data.lives;
+        world.loadFromFile(world.mapFilePath);
+        player_data.lives = saved_lives;
+        return;
+    }
+    if (input == 'n') { next_level(); return; }
+
+    // ---- Illuminate adjacent tile (i/j/k/l = up/left/down/right) ----
+    // Illuminating does NOT count as a move and does NOT tick enemies
+    if (input == 'i') { world.illuminateTile(0, -1); return; }
+    if (input == 'k') { world.illuminateTile(0, 1); return; }
+    if (input == 'j') { world.illuminateTile(-1, 0); return; }
+    if (input == 'l') { world.illuminateTile(1, 0); return; }
+
+    // ---- Movement (w/a/s/d) ----
+    int dx = 0, dy = 0;
+    if (input == 'w') dy = -1;
+    else if (input == 's') dy = 1;
+    else if (input == 'a') dx = -1;
+    else if (input == 'd') dx = 1;
+    else return; // unknown key - do nothing
+
+    // tryMovePlayer handles fog-of-war encounters and wall blocking
+    world.tryMovePlayer(dx, dy);
+
+    // Oxygen is consumed whether or not the move succeeded (per spec:
+    // "attempting to move into an obstacle consumes one turn's oxygen")
+    player_data.reduceOxygen(OXYGEN_PER_MOVE);
+
+    if (!player_data.hasOxygen()) {
+        cout << "*** OUT OF OXYGEN! Taking damage! ***\n";
+        player_data.takeDamage(OXYGEN_DAMAGE);
+        if (!player_data.isAlive()) {
+            handle_player_death();
+            return;
+        }
+    }
+
+    // Check if the player has died from a dark-tile encounter this move
+    if (!player_data.isAlive()) {
+        handle_player_death();
+        return;
+    }
+
+    // Activate enemies that are now in the player's line of sight
+    world.updateEnemyActivation();
+
+    // Tick all enemies
+    bool player_killed = world.updateEnemies();
+    if (player_killed) {
+        handle_player_death();
+    }
+}
+
+/****************************************************/
+// render_screen
+/****************************************************/
+void render_screen(void)
+{
+    if (game_over) return;
+    if (!world.map) { cout << "(no map loaded)\n"; return; }
+
+    cout << "\n";
+    cout << "  [Level " << (current_map_index + 1)
+        << "/" << map_playlist.size() << "]\n";
+
+    world.render();  // World handles fog-of-war masking
+
+    cout << "\n";
+    cout << "  Oxygen:  " << player_data.oxygen << "%"
+        << "  |  Health: " << player_data.health
+        << "  |  Battery: " << player_data.battery << "%"
+        << "  |  Lives: " << player_data.lives << "\n";
+    cout << "\n";
+}
+
+/****************************************************/
+// start_splash_screen
+/****************************************************/
+void start_splash_screen(void)
+{
+    cout << "\n";
+    cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+    cout << "  ~    W E L C O M E   T O   H O L Y   D I V E R   ~\n";
+    cout << "  ~                     v0.04                        ~\n";
+    cout << "  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n";
+    cout << "  Move:        w=Up  s=Down  a=Left  d=Right\n";
+    cout << "  Illuminate:  i=Up  k=Down  j=Left  l=Right  (costs 5% battery)\n";
+    cout << "  Other:       r=Reload  n=Next level  q=Quit\n\n";
+    cout << "  The map is DARK. Illuminate tiles before moving into them.\n";
+    cout << "  Moving into darkness may reveal hidden enemies - painfully.\n";
+    cout << "  M = moving enemy (chases you once activated)\n";
+    cout << "  S = stationary enemy (hurts when you walk into it)\n";
+    cout << "  You have " << INIT_LIVES << " lives. Good luck.\n\n";
+}
+
+/****************************************************/
+// startup_routines
+/****************************************************/
+void startup_routines(void)
+{
+    srand((unsigned)time(nullptr));
+
+    // Link World to the player object
+    world.player = &player_data;
+
+    cout << "Enter path for Level 1 map file: ";
+    string lvl1; getline(cin, lvl1);
+    map_playlist.push_back(lvl1);
+
+    cout << "Enter path for Level 2 map file (Enter to skip): ";
+    string lvl2; getline(cin, lvl2);
+    if (!lvl2.empty()) map_playlist.push_back(lvl2);
+
+    current_map_index = 0;
+
+    if (world.loadFromFile(map_playlist[0]) != 0) {
+        cout << "Failed to load map. Exiting.\n";
+        exit(1);
+    }
+
+    render_screen();
+}
+
+/****************************************************/
+// quit_routines
+/****************************************************/
+void quit_routines(void)
+{
+    world.freeMap();
+    cout << "\nBYE! Welcome back soon.\n";
 }
 
 /****************************************************/
@@ -57,216 +306,15 @@ int main(void)
 {
     start_splash_screen();
     startup_routines();
-    char input;
 
-    while (!game_over)
-    {
+    char input;
+    while (!game_over) {
         input = '\0';
         if (0 > read_input(&input)) break;
         update_state(input);
-        render_screen();
+        if (!game_over) render_screen();
     }
 
     quit_routines();
     return 0;
-}
-
-/****************************************************/
-// FUNCTION free_map
-// Frees dynamically allocated map memory
-/****************************************************/
-void free_map(void)
-{
-    if (map != nullptr) {
-        for (int i = 0; i < map_rows; i++) {
-            free(map[i]);
-        }
-        free(map);
-        map = nullptr;
-    }
-    map_rows = 0;
-    map_cols = 0;
-}
-
-/****************************************************/
-// FUNCTION load_level
-// Opens map file, allocates 2D char array, reads map.
-// Returns 0 on success, -1 on failure.
-/****************************************************/
-int load_level(string filepath)
-{
-    ifstream file(filepath);
-    if (!file.is_open()) {
-        cout << "Error: Could not open file: " << filepath << endl;
-        return -1;
-    }
-
-    // Read all lines into a vector first to know dimensions
-    vector<string> lines;
-    string line;
-    while (getline(file, line)) {
-        if (!line.empty())
-            lines.push_back(line);
-    }
-    file.close();
-
-    if (lines.empty()) {
-        cout << "Error: Map file is empty." << endl;
-        return -1;
-    }
-
-    // Free old map if any
-    free_map();
-
-    map_rows = lines.size();
-    map_cols = lines[0].size();
-
-    // Allocate 2D array
-    map = (char**)malloc(map_rows * sizeof(char*));
-    if (!map) { cout << "Error: Memory allocation failed." << endl; return -1; }
-
-    for (int i = 0; i < map_rows; i++) {
-        map[i] = (char*)malloc((map_cols + 1) * sizeof(char));
-        if (!map[i]) { cout << "Error: Memory allocation failed." << endl; return -1; }
-        // Copy line into map row
-        for (int j = 0; j < map_cols; j++) {
-            map[i][j] = (j < (int)lines[i].size()) ? lines[i][j] : 'x';
-        }
-        map[i][map_cols] = '\0';
-    }
-
-    // Find player starting position 'P'
-    for (int i = 0; i < map_rows; i++) {
-        for (int j = 0; j < map_cols; j++) {
-            if (map[i][j] == 'P') {
-                player_data.y = i;
-                player_data.x = j;
-            }
-        }
-    }
-
-    return 0;
-}
-
-/****************************************************/
-// FUNCTION read_input
-/****************************************************/
-int read_input(char* input)
-{
-    cout << ">>> (1=up 2=down 3=left 4=right | r=reload | q=quit): ";
-    try {
-        cin >> *input;
-    }
-    catch (...) {
-        return -1;
-    }
-    cout << endl;
-    cin.ignore();
-    if (*input == 'q') return -2;
-    return 0;
-}
-
-/****************************************************/
-// FUNCTION update_state
-// Handles player movement, oxygen, and map reload
-/****************************************************/
-void update_state(char input)
-{
-    if (input == 'r') {
-        cout << "Reloading map..." << endl;
-        load_level(current_map_path);
-        player_data.reset(player_data.x, player_data.y);
-        return;
-    }
-
-    int new_x = player_data.x;
-    int new_y = player_data.y;
-
-    if (input == '1') new_y--;  // up
-    else if (input == '2') new_y++;  // down
-    else if (input == '3') new_x--;  // left
-    else if (input == '4') new_x++;  // right
-    else return; // unknown input, do nothing
-
-    // Bounds check
-    if (new_y < 0 || new_y >= map_rows || new_x < 0 || new_x >= map_cols) {
-        cout << "Can't move there!" << endl;
-        return;
-    }
-
-    char target = map[new_y][new_x];
-
-    // Allow movement onto 'o', 'P', or 'M' tiles; block 'x'
-    if (target == 'x') {
-        cout << "Blocked by obstacle!" << endl;
-        return;
-    }
-
-    // Move player: clear old position, set new
-    map[player_data.y][player_data.x] = 'o';
-    player_data.x = new_x;
-    player_data.y = new_y;
-    map[player_data.y][player_data.x] = 'P';
-
-    // Reduce oxygen
-    player_data.reduceOxygen(OXYGEN_PER_MOVE);
-
-    if (!player_data.hasOxygen()) {
-        cout << "*** OUT OF OXYGEN! ***" << endl;
-    }
-}
-
-/****************************************************/
-// FUNCTION render_screen
-/****************************************************/
-void render_screen(void)
-{
-    if (map == nullptr) {
-        cout << "(no map loaded)" << endl;
-        return;
-    }
-
-    cout << endl;
-    for (int i = 0; i < map_rows; i++) {
-        cout << map[i] << endl;
-    }
-    cout << endl;
-    cout << "Oxygen: " << player_data.oxygen << "% | "
-        << "Health: " << player_data.health << " | "
-        << "Lives: " << player_data.lives << endl;
-    cout << endl;
-}
-
-/****************************************************/
-// FUNCTION start_splash_screen
-/****************************************************/
-void start_splash_screen(void)
-{
-    cout << endl << "WELCOME to epic Holy Diver v0.02" << endl;
-    cout << "Controls: 1=Up  2=Down  3=Left  4=Right  r=Reload  q=Quit" << endl << endl;
-}
-
-/****************************************************/
-// FUNCTION startup_routines
-/****************************************************/
-void startup_routines(void)
-{
-    cout << "Enter map file path: ";
-    getline(cin, current_map_path);
-
-    if (load_level(current_map_path) != 0) {
-        cout << "Failed to load map. Exiting." << endl;
-        exit(1);
-    }
-
-    render_screen(); // show map right after loading (week 1 requirement)
-}
-
-/****************************************************/
-// FUNCTION quit_routines
-/****************************************************/
-void quit_routines(void)
-{
-    free_map();
-    cout << endl << "BYE! Welcome back soon." << endl;
 }
