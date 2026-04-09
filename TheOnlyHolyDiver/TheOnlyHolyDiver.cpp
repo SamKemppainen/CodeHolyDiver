@@ -1,20 +1,13 @@
 /*
- * Holy Diver - a turn-based underwater adventure game.
+ * Holy Diver - a turn-based underwater adventure game, very thrilling...
  *
- * Weekly progress:
- *   Week 1: Load map from file, display it.
- *   Week 2: Player movement, oxygen consumption, map reload ('r').
- *   Week 3: Second map, enemy chase AI, death screen, lives/respawn system.
- *   Week 4: Fog of war, battery/flashlight system, enemy polymorphism
- *            (MovingEnemy / StationaryEnemy), World class as movement authority.
- *   Week 5: Treasure collectibles ($) - collect all to advance to next level.
  *
  * Controls:
  *   Move:       w=up  s=down  a=left  d=right
  *   Illuminate: i=up  k=down  j=left  l=right   (costs 5% battery)
  *   Other:      r=reload  n=next level  q=quit
  *
- * Map tile legend:
+ * Map tile symbols:
  *   x = wall/obstacle      o = open floor
  *   P = player start       M = moving enemy
  *   S = stationary enemy   $ = treasure (collect all to advance)
@@ -27,10 +20,18 @@
 
 /* MY THOUGHTS
 *Well, I think I should address the elephant in the room and say that yes AI was used very heavily with this task.
-*The progress I used was that I first made a primitive version on my own (now deleted). 
-*Then with some understanding of the main points I used Ai to help me build a proper version of the game.
-*I then spend my time analyzing and asking about the methods used, the "whys" and "hows" of it.
+*The progress I used was that I first made a very primitive version on my own (now deleted) to get some experience. 
+*Then with some understanding of the main points I used Ai and google to help me build a proper version of the game.
+*I then spend my time analyzing and asking about the methods used in the code as well as their applications in the C++ language, the "whys" and "hows" of it.
+* This is mostly working learning method but still, it is hard not to fall into the trap where AI carries the project so much that you end up learning nothing...
+* You really need to prompt it with "dont give me full codes, but help me learn"
+* Sigh, but such is the world we live in
 *
+* 
+* Well, through out the code there are snippets of Ai comments left in.
+* These are intented to help me understand the code I have made and hopefully get the main points across.
+* I wish to be informed if any of these comments are missleading or encourage a bad working method.
+* Or if i have at somepoint missed the point of the function and created incorrect methods in thís system.
 
 
 
@@ -59,7 +60,7 @@ using namespace std;
 // but this one global function is kept to satisfy the spec.
 //
 // In a larger project you would use an event system, a callback,
-// or a singleton GameManager to avoid this global entirely.
+// or a singleton GameManager to avoid this global entirely.     <<-- SEE this is the part of Ai trying to explain the function and working methods to me
 // ---------------------------------------------------------------
 bool g_game_over = false;   // the one global: set by gameOver(), read by GameManager::run()
 
@@ -104,7 +105,7 @@ public:
 private:
     // ---- Owned game objects ----
     // Player and World are member objects (not pointers) - they are
-    // created when GameManager is created and destroyed with it.
+    // created when GameManager is created and destroyed with it.  Cool Cool
     Player player;   // the human player's state
     World  world;    // the game world: map, enemies, items
 
